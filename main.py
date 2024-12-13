@@ -1,7 +1,7 @@
 import curses
 import struct
 
-# Command identifiers
+# Command identifiers: These constants represent the commands used in the binary stream.
 COMMAND_SETUP = 0x1
 COMMAND_DRAW_CHAR = 0x2
 COMMAND_DRAW_LINE = 0x3
@@ -15,48 +15,45 @@ def parse_binary_stream(stream):
     """Parse a binary stream into commands and associated data."""
     i = 0
     while i < len(stream):
-        # print(f"Parsing index {i}...")
-        if i + 1 >= len(stream):  # Ensure enough data for command and length
+        # Ensure enough data is present for a valid command and its length byte
+        if i + 1 >= len(stream):  
             raise ValueError(f"Malformed stream at index {i}: insufficient data for length.")
         
-        command = stream[i]
-        length = stream[i + 1]
+        command = stream[i]  # Read the command identifier
+        length = stream[i + 1]  # Read the length of the data associated with the command
         
-        if i + 2 + length > len(stream):  # Ensure enough data for the declared length
+        # Validate if the stream contains sufficient data as declared by the length byte
+        if i + 2 + length > len(stream):
             raise ValueError(f"Malformed stream at index {i}: insufficient data for command {command}.")
         
-        data = stream[i + 2: i + 2 + length]
-        # print(f"Command: {command}, Length: {length}, Data: {data}")
-        yield command, data
-        i += 2 + length
+        data = stream[i + 2: i + 2 + length]  # Extract the command's data
+        yield command, data  # Yield the command and its data as a tuple
+        i += 2 + length  # Move the pointer to the next command in the stream
 
 def setup_screen(data):
     """Handle screen setup command."""
-    width, height, color_mode = data
-    # print(f"Setup screen: width={width}, height={height}, color_mode={color_mode}")
-    return width, height, color_mode
+    width, height, color_mode = data  # Extract screen dimensions and color mode
+    return width, height, color_mode  # Return the parsed setup information
 
 def draw_char(screen, data):
     """Handle drawing a character."""
-    x, y, color, char = data
-    # print(f"Draw char '{chr(char)}' at ({x}, {y}) with color {color}")
-    screen.addch(y, x, char)
+    x, y, color, char = data  # Extract position, color, and character information
+    screen.addch(y, x, char)  # Draw the character on the screen at the specified position
 
 def draw_line(screen, data):
     """Handle drawing a line between two points."""
-    x1, y1, x2, y2, color, char = data
+    x1, y1, x2, y2, color, char = data  # Extract start and end points, color, and character
     dx = abs(x2 - x1)
     dy = abs(y2 - y1)
-    sx = 1 if x1 < x2 else -1
-    sy = 1 if y1 < y2 else -1
+    sx = 1 if x1 < x2 else -1  # Determine x step direction
+    sy = 1 if y1 < y2 else -1  # Determine y step direction
     err = dx - dy
 
-    max_y, max_x = screen.getmaxyx()
-    # print(f"Draw line from ({x1}, {y1}) to ({x2}, {y2}) with char '{chr(char)}' and color {color}")
+    max_y, max_x = screen.getmaxyx()  # Get screen dimensions to avoid out-of-bound errors
     while True:
         if 0 <= y1 < max_y and 0 <= x1 < max_x:
-            screen.addch(y1, x1, char)
-        if x1 == x2 and y1 == y2:
+            screen.addch(y1, x1, char)  # Draw the character at the current position
+        if x1 == x2 and y1 == y2:  # Break loop when the endpoint is reached
             break
         e2 = err * 2
         if e2 > -dy:
@@ -68,37 +65,33 @@ def draw_line(screen, data):
 
 def render_text(screen, data):
     """Handle rendering a string of text."""
-    x, y, color, *text = data
-    # print(f"Render text '{''.join(map(chr, text))}' at ({x}, {y}) with color {color}")
-    for i, char in enumerate(text):
-        screen.addch(y, x + i, char)
+    x, y, color, *text = data  # Extract position, color, and text data
+    for i, char in enumerate(text):  # Loop through each character in the text
+        screen.addch(y, x + i, char)  # Render each character at the specified position
 
 def move_cursor(screen, data):
     """Move the cursor to a specific location."""
-    x, y = data
-    # print(f"Move cursor to ({x}, {y})")
-    screen.move(y, x)
+    x, y = data  # Extract cursor position
+    screen.move(y, x)  # Move the cursor to the specified position
 
 def draw_at_cursor(screen, data):
     """Draw a character at the current cursor location."""
-    char, color = data
-    y, x = screen.getyx()
-    # print(f"Draw char '{chr(char)}' at cursor ({x}, {y}) with color {color}")
-    screen.addch(y, x, char)
+    char, color = data  # Extract character and color information
+    y, x = screen.getyx()  # Get the current cursor position
+    screen.addch(y, x, char)  # Draw the character at the cursor's position
 
 def clear_screen(screen):
     """Clear the screen."""
-    # print("Clear screen")
-    screen.clear()
+    screen.clear()  # Clear all content from the screen
 
 def render_terminal(screen, commands):
     """Render commands to the terminal screen."""
-    screen.clear()
-    dimensions_set = False
+    screen.clear()  # Clear the screen before rendering
+    dimensions_set = False  # Ensure screen dimensions are set before rendering commands
     for command, data in commands:
         if command == COMMAND_SETUP:
-            width, height, color_mode = setup_screen(data)
-            screen.clear()
+            width, height, color_mode = setup_screen(data)  # Setup screen dimensions and color mode
+            screen.clear()  # Clear screen after setup
             dimensions_set = True
         elif not dimensions_set:
             raise ValueError("Screen dimensions must be set before any other commands!")
@@ -115,10 +108,9 @@ def render_terminal(screen, commands):
         elif command == COMMAND_CLEAR_SCREEN:
             clear_screen(screen)
         elif command == COMMAND_END:
-            # print("End of commands")
-            break
-        screen.refresh()
-    screen.getch()  # Pause for user to view output
+            break  # Stop processing commands
+        screen.refresh()  # Refresh the screen to reflect the changes
+    screen.getch()  # Wait for user input to prevent immediate closure
 
 def main():
     """Main program logic."""
@@ -131,8 +123,8 @@ def main():
         COMMAND_DRAW_AT_CURSOR, 2, ord('*'), 0x02, # Draw '*' at cursor
         COMMAND_END, 0                             # End commands
     ])
-    commands = parse_binary_stream(binary_stream)
-    curses.wrapper(lambda stdscr: render_terminal(stdscr, commands))
+    commands = parse_binary_stream(binary_stream)  # Parse the binary stream into commands
+    curses.wrapper(lambda stdscr: render_terminal(stdscr, commands))  # Render commands in a terminal-safe wrapper
 
 if __name__ == "__main__":
-    main()
+    main()  # Run the main function
